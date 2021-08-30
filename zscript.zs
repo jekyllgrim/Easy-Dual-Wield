@@ -147,6 +147,7 @@ Class EDW_Weapon : Weapon abstract
 	{
 		if (!player)
 			return;
+		//Enable bobbing:
 		A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
 		state targetState = null;
 		bool pressingFire = player.cmd.buttons & BT_ATTACK;		
@@ -161,11 +162,13 @@ Class EDW_Weapon : Weapon abstract
 				targetState = invoker.s_reloadRight;
 			}			
 		}
+		//if we're going to fire/reload, disable bobbing:
 		if (targetState) 
 		{
 			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,false);
 			player.SetPsprite(OverlayID(),targetState);
 		}
+		//otherwise re-enable bobbing:
 		else 
 		{
 			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
@@ -404,94 +407,16 @@ Class EDW_Weapon : Weapon abstract
 	}
 }
 
-Class EDW_PistolRL : EDW_Weapon
-{
-	Default
-	{
-		Weapon.AmmoType1 	"Clip";
-		Weapon.AmmoGive1 	20;
-		Weapon.Ammouse1 	1;
-		Weapon.AmmoType2 	"RocketAmmo";
-		Weapon.AmmoGive2 	2;
-		Weapon.Ammouse2 	1;
-		Weapon.Slotnumber	8;
-	}
-	States
-	{
-	//Pistol:
-	Ready.Right:
-		PISG A 1 {
-			Right_WeaponReady();
-			A_OverlayOffset(OverlayID(),-48,0,WOF_KEEPY);			
-		}
-		Loop;
-	Deselect.Right:
-		PISG A 1;
-		Loop;
-	Select.Right:
-		PISG A 1 
-		{
-			Right_Raise();
-			A_OverlayOffset(OverlayID(),-48,0,WOF_KEEPY);
-		}
-		Loop;
-	Fire.Right:
-		PISG A 4 A_OverlayOffset(OverlayID(),-48,0,WOF_KEEPY);
-		PISG B 6 
-		{
-			Right_GunFlash();
-			A_PlaySound("weapons/pistol",CHAN_RIGHTGUN);
-			Right_FireBullets(5.6,0,1,5);
-		}
-		PISG C 4;
-		PISG B 5 Right_ReFire;
-		Goto Ready.Right;
-	Flash.Right:
-		PISF A 7 Bright 
-		{
-			A_Light1();
-			A_OverlayOffset(OverlayID(),-48,0,WOF_KEEPY);
-		}
-		Goto LightDone;
-		
-	//Plasma Rifle:
-	Ready.Left:
-		MISG A 1 
-		{
-			A_OverlayOffset(OverlayID(),48,0,WOF_KEEPY);
-			Left_WeaponReady();
-		}
-		Loop;
-	Deselect.Left:
-		MISG A 1;
-		Loop;
-	Select.Left:
-		MISG A 1 
-		{
-			A_OverlayOffset(OverlayID(),48,0,WOF_KEEPY);
-			Left_Raise();
-		}
-		Loop;
-	Fire.Left:
-		MISG B 8 
-		{
-			A_OverlayOffset(OverlayID(),48,0,WOF_KEEPY);	
-			Left_GunFlash();		
-		}
-		MISG B 12
-		{
-			A_SetFireMode(true);
-			A_FireMissile();
-		}		
-		MISG B 0 Left_ReFire;
-		Goto Ready.Left;
-	Flash.Left:
-		MISF A 3 Bright A_Light1;
-		MISF B 4 Bright;
-		MISF CD 4 Bright A_Light2;
-		Goto LightDone;
-	}
-}
+
+/*	This is an example weapon that combines a plasma rifle
+	and an explosive cannon.
+	
+	Apart from showing how to apply the Easy Dual-Wield functions,
+	in this gun I'm also demonstrating how to apply overlay offset 
+	and scale to make the gun look more interesting.
+	You don't have to copy my methods exactly, this is just a showcase
+	of things that could be done to improve the visuals of the weapon.
+*/
 
 Class EDW_PlasmaAndCannon : EDW_Weapon
 {
@@ -504,6 +429,7 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		Weapon.AmmoGive2 	80;
 		Weapon.Ammouse2 	1;
 		Weapon.Slotnumber	9;
+		//InverseSmooth is my preferred bobbing style, but any should work
 		Weapon.Bobstyle		'InverseSmooth';
 		Weapon.BobRangeX	0.7;
 		Weapon.BobRangeY	0.5;
@@ -511,7 +437,9 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	}
 	States
 	{
-	//Cannon:
+	/*//////////////////
+		CANNON STATES
+	*///////////////////[
 	Ready.Right:
 		ATGG A 1 Right_WeaponReady();
 		Loop;
@@ -524,30 +452,40 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	Fire.Right:
 		ATGG A 1
 		{
+			/*	We change the gun's scale and offset in its attack animation,
+				so I start by resetting those just to be safe.
+			*/
 			A_OverlayOffset(OverlayID(),0,0,WOF_INTERPOLATE);
 			A_OverlayScale(OverlayID(),1,1,WOF_INTERPOLATE);
 			Right_GunFlash();
+			// This simply spawns a rocket that looks smaller and flies faster:
 			let proj = Right_FireProjectile("Rocket",spawnofs_xy:8);
 			if (proj)
 			{
-				proj.vel *= 2;
-				proj.scale *= 0.5;
+				proj.vel *= 2.5;
+				proj.scale *= 0.38;
 			}
 		}
 		ATGG AAA 1
 		{
+			//Offset the gun and increase its scale:
 			A_OverlayScale(OverlayID(),0.06,0.06,WOF_ADD);
-			A_OverlayScale(PSP_RIGHTFLASH,0.06,0.06,WOF_ADD);
 			A_OverlayOffset(OverlayID(),6,6,WOF_ADD);
+			//Do the same with the muzzle flash so it's synced!
+			A_OverlayScale(PSP_RIGHTFLASH,0.06,0.06,WOF_ADD);
 			A_OverlayOffset(PSP_RIGHTFLASH,6,6,WOF_ADD);
 		}
 		ATGG AAAAAAAAA 1
 		{
+			//And here we'll slowly roll back the offset and the scale.
+			//The flash isn't drawn at this point, so no need to worry about it.
 			A_OverlayOffset(OverlayID(),-1,-1,WOF_ADD);			
 			A_OverlayScale(OverlayID(),-0.02,-0.02,WOF_ADD);
 		}
 		ATGG AAAAAAAAA 1
 		{
+			//The gun keeps slowly retracting from the recoil, but at this point
+			//we're letting the player refire it.
 			A_OverlayOffset(OverlayID(),-1,-1,WOF_ADD);
 			Right_ReFire();
 		}
@@ -557,7 +495,9 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		ATGF B 2 bright A_Light1;
 		Goto LightDone;
 		
-	//Plasma Rifle:
+	/*////////////////////////
+		PLASMA RIFLE STATES
+	*/////////////////////////
 	Ready.Left:
 		D3PG A 1 Left_WeaponReady();
 		Loop;
@@ -570,16 +510,21 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	Fire.Left:
 		D3PG A 1
 		{
+			//Plasma rifle animation is a bit simpler, it only uses some offsets
+			//without modifying scale:
 			A_OverlayOffset(OverlayID(),0,0);
 			Left_GunFlash();
 			Left_FireProjectile("Plasmaball",spawnofs_xy:-8);
 		}
 		D3PG AA 1
 		{
-			double ofx = -frandom[sfx](2,4);
-			double ofy = frandom[sfx](2,4);
-			A_OverlayOffset(OverlayID(),ofx,ofy,WOF_ADD);
-			A_OverlayOffset(PSP_LEFTFLASH,ofx,ofy,WOF_ADD);
+			//I want the gun to recoil with a bit of randomization,
+			//so I'm first getting some random values:
+			vector2 ofs = (-frandom[sfx](2,4), frandom[sfx](2,4));
+			//Then I'm applying those values both to the gun
+			//and to its muzzle flash, so that they're synced:
+			A_OverlayOffset(OverlayID(),ofs.x,ofs.y,WOF_ADD);
+			A_OverlayOffset(PSP_LEFTFLASH,ofs.x,ofs.y,WOF_ADD);
 		}
 		D3PG A 5
 		{
@@ -591,15 +536,17 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		D3PF A 2 bright
 		{
 			A_Light1();
+			//The muzzle flash randomly uses one of 3 possible frames:
 			let psp = Player.FindPSprite(OverlayID());
 			if (psp)
 				psp.frame = random[sfx](0,2);
-		}
-		#### # 2 bright 
-		{
+			//I also want to modify the layer's alpha, so I'm setting this here too
+			//(without setting these flags overlay's alpha can't be changed)
 			A_OverlayFlags(OverlayID(),PSPF_ALPHA|PSPF_FORCEALPHA,true);
-			A_OverlayAlpha(OverlayID(),0.65);
 		}
+		//and I fade the flash out just to make it a bit more interesting:
+		#### # 1 bright A_OverlayAlpha(OverlayID(),0.65);
+		#### # 1 bright A_OverlayAlpha(OverlayID(),0.3);
 		Goto LightDone;
 	}
 }
