@@ -6,6 +6,8 @@ Class EDW_Weapon : Weapon abstract
 	property MagAmmotype1 : MagAmmotype1;
 	property MagAmmotype2 : MagAmmotype2;
 	
+	protected bool continueReload;
+	
 	int raisespeed;
 	int lowerspeed;
 	property raisespeed : raisespeed;
@@ -75,7 +77,14 @@ Class EDW_Weapon : Weapon abstract
 		s_ReloadWaitLeft = FindState("ReloadWait.Left");
 	}
 	
-	action bool CheckInfiniteAmmo()
+	override void DoEffect()
+	{
+		super.DoEffect();
+		//console.printf("continue reload: %d",continueReload);
+	}
+	
+	// Returns true if ammo should be infinite
+	action bool EDW_CheckInfiniteAmmo()
 	{
 		return (sv_infiniteammo || FindInventory("PowerInfiniteAmmo",true) );
 	}
@@ -84,7 +93,8 @@ Class EDW_Weapon : Weapon abstract
 		Ready state sequence (NOT in the left/right ready sequences).
 		This doesn't actually make the weapon ready for firing directly, but 
 		rather	makes sure everything is set up correctly and creates overlays
-		if they haven't been created yet.		
+		if they haven't been created yet.
+		It also initiates reloading.
 	*/
 	action void DualWeaponReady()
 	{
@@ -107,25 +117,49 @@ Class EDW_Weapon : Weapon abstract
 		if (!invoker.secondaryAmmo && invoker.AmmoType2)
 			invoker.secondaryAmmo = invoker.MagAmmotype2 ?Ammo(FindInventory(invoker.MagAmmotype2)) : Ammo(FindInventory(invoker.Ammotype2));			
 		
-		// Handle reloading:
 		bool readyright = Right_CheckReady();
 		bool readyleft = Left_CheckReady();
+		bool reloadReadyRight = Right_CheckReadyForReload();
+		bool reloadReadyLeft = Left_CheckReadyForReload();
+		// disable "rage face" if neither weapon is firing:
 		if (readyright && readyleft)
 		{
-			if (player.cmd.buttons & BT_RELOAD)
+			player.attackdown = false;
+		}
+		// Handle pressing Reload button
+		if (player.cmd.buttons & BT_RELOAD)
+		{
+			// Check if guns can be reloaded independently:
+			if (invoker.bAKIMBORELOAD)
 			{
-				bool validRight = Right_CheckReadyForReload();
-				bool validLeft = Left_CheckReadyForReload();
-				if (validRight)
-				{
+				//reload right gun
+				if (reloadReadyRight)
 					Right_Reload();
-				}
-				if (!validRight || invoker.bAKIMBORELOAD)
+				//at the same time reload left gun
+				if (reloadReadyLeft)
 					Left_Reload();
 			}
-			// Also disable "rage face" if neither weapon is firing:
-			player.attackdown = false;
-		}			
+			// Otherwise both guns must be in their Ready states:
+			else if (readyright && readyleft)
+			{
+				//only reload right:
+				if (reloadReadyRight)
+					Right_Reload();
+				//otherwise only reload left:
+				else
+					Left_Reload();
+			}
+		}
+		/*	If player isn't pressing Reload but this bool was set by the right gun,
+			proceed to reload the left gun as well.
+			This is done to reload both guns in succession without havgin to
+			press the Reload button twice.
+		*/
+		else if (!invoker.bAKIMBORELOAD && invoker.continueReload && reloadReadyLeft)
+		{
+			invoker.continueReload = false;
+			Left_Reload();
+		}
 		
 		A_WeaponReady(WRF_NOFIRE); //let the gun bob and be deselected
 		
@@ -152,8 +186,9 @@ Class EDW_Weapon : Weapon abstract
 	action bool Right_CheckReadyForReload(bool left = false)
 	{
 		if (!left)
-			return invoker.s_reloadRight && Right_CheckReady() && (invoker.primaryAmmo.amount < invoker.primaryAmmo.maxamount) && (invoker.ammo1.amount >= invoker.ammouse1);		
-		return invoker.s_reloadLeft && Left_CheckReady() && (invoker.secondaryAmmo.amount < invoker.secondaryAmmo.maxamount) && (invoker.ammo2.amount >= invoker.ammouse2);
+			return invoker.s_reloadRight && Right_CheckReady() && invoker.primaryAmmo != invoker.ammo1 && (invoker.primaryAmmo.amount < invoker.primaryAmmo.maxamount) && (invoker.ammo1.amount >= invoker.ammouse1);
+		else
+			return invoker.s_reloadLeft && Left_CheckReady() && invoker.secondaryAmmo != invoker.ammo2 && (invoker.secondaryAmmo.amount < invoker.secondaryAmmo.maxamount) && (invoker.ammo2.amount >= invoker.ammouse2);
 	}
 	// left-gun alias:
 	action bool Left_CheckReadyForReload()
@@ -161,24 +196,23 @@ Class EDW_Weapon : Weapon abstract
 		return Right_CheckReadyForReload(true);
 	}
 	
-	/*action bool Sign(double num)
-	{
-		return num >= 0 ? 1 : -1;
-	}*/
-	
-	/*	Returns true if you have enough ammo.
-		The argument specifies whether to check for primary or secondary ammo.
+	/*	Returns true if the gun has enough ammo to fire.
 	*/
-	action bool EDW_CheckAmmo(bool secondary = false)
+	action bool Right_CheckAmmo(bool left = false)
 	{
-		let ammo2check = secondary ? invoker.secondaryAmmo : invoker.primaryAmmo;
+		let ammo2check = left ? invoker.secondaryAmmo : invoker.primaryAmmo;
 		// Return true if the weapon doesn't define ammo (= doesn't need it)
 		if (!ammo2check)
 			return true;
 		// Otherwise get the required amount
-		int reqAmt = secondary ? invoker.ammouse2 : invoker.ammouse1;
+		int reqAmt = left ? invoker.ammouse2 : invoker.ammouse1;
 		// Return true if infinite ammo is active or we have enough
-		return CheckInfiniteAmmo() || ammo2check.amount >= reqAmt;
+		return EDW_CheckInfiniteAmmo() || ammo2check.amount >= reqAmt;
+	}
+	//left-gun alias:
+	action bool Left_CheckAmmo()
+	{
+		return Right_CheckAmmo(true);
 	}
 	
 	/*	The actual raising is done via the regular A_Raise in the regular Select
@@ -199,7 +233,7 @@ Class EDW_Weapon : Weapon abstract
 			player.SetPsprite(OverlayID(),targetState);
 		}
 	}
-	//Left-gun alias function:
+	//Left-gun alias:
 	action void Left_Raise()
 	{
 		Right_Raise(true);
@@ -219,9 +253,10 @@ Class EDW_Weapon : Weapon abstract
 		bool pressingFire = player.cmd.buttons & BT_ATTACK;		
 		if (pressingFire)
 		{
-			if (EDW_CheckAmmo(secondary:false))
+			if (Right_CheckAmmo())
 			{
 				targetState = invoker.s_fireRight;
+				invoker.continueReload = false;
 			}
 			else if (invoker.MagAmmotype1 && invoker.ammo1.amount > 0)
 			{
@@ -267,9 +302,10 @@ Class EDW_Weapon : Weapon abstract
 		bool pressingFire = player.cmd.buttons & BT_ALTATTACK;		
 		if (pressingFire)
 		{
-			if (EDW_CheckAmmo(secondary:true))
+			if (Left_CheckAmmo())
 			{
 				targetState = invoker.s_fireLeft;
+				invoker.continueReload = false;
 			}
 			else if (invoker.MagAmmotype2 && invoker.ammo2.amount > 0)
 			{
@@ -339,7 +375,7 @@ Class EDW_Weapon : Weapon abstract
 		if (s_fire && (InStateSequence(psp.curstate,s_fire) || InStateSequence(psp.curstate,s_hold)))
 		{
 			//Check if we have enough ammo and the attack button is being held:
-			if (EDW_CheckAmmo(left) && player.cmd.buttons & atkbutton && player.oldbuttons & atkbutton)
+			if (Right_CheckAmmo(left) && player.cmd.buttons & atkbutton && player.oldbuttons & atkbutton)
 			{
 				//if so, jump to Hold (if it exists) or to Fire
 				targetState = s_hold ? s_hold : s_fire;
@@ -354,11 +390,8 @@ Class EDW_Weapon : Weapon abstract
 		//if we're not refiring...
 		else
 		{
-			//find the state the OTHER gun is in:
-			let psp_other = left ? Player.FindPSprite(PSP_RIGHTGUN) : Player.FindPSprite(PSP_LEFTGUN);
-			let s_otherGunReady = left ? invoker.s_readyRight : invoker.s_readyLeft;
 			//if the OTHER gun is in its Ready sequence, reset player.refire:
-			if (psp_other && InStateSequence(psp_other.curstate,s_otherGunReady))
+			if (Right_CheckReady(left))
 				player.refire = 0;
 		}
 	}
@@ -373,14 +406,19 @@ Class EDW_Weapon : Weapon abstract
 	action void Right_Reload(bool left = false)
 	{
 		if (!Right_CheckReadyForReload(left))
+		{
 			return;
+		}
 		//if bAKIMBORELOAD is false, set the OTHER gun into ReloadWait state sequence:
 		if (!invoker.bAKIMBORELOAD)
 		{
 			int othergun = left ? PSP_RIGHTGUN : PSP_LEFTGUN;
 			state waitstate = left ? invoker.s_ReloadWaitRight : invoker.s_ReloadWaitLeft;
 			if (waitstate)
+			{
 				player.SetPsprite(othergun,waitstate);
+				invoker.continueReload = true;
+			}
 		}
 		//set the current layer to the Reload state sequence:
 		let targetState = left ? invoker.s_reloadLeft : invoker.s_reloadRight;
@@ -483,7 +521,7 @@ Class EDW_Weapon : Weapon abstract
 
 	override bool DepleteAmmo(bool altFire, bool checkEnough, int ammouse)
 	{
-		if (!CheckInfiniteAmmo())
+		if (!EDW_CheckInfiniteAmmo())
 		{
 			if (checkEnough && !CheckAmmo (altFire ? AltFire : PrimaryFire, false, false, ammouse))
 			{
@@ -536,10 +574,10 @@ Class EDW_Weapon : Weapon abstract
 	{
 	// Normally Ready can be left as is in weapons based on this one
 	Ready:
-		TNT1 A 1 DualWeaponReady();
-		TNT1 A 0
+		TNT1 A 1 
 		{
-			console.printf("primary: %d | secondary: %d",invoker.primaryAmmo.amount,invoker.secondaryAmmo.amount);
+			DualWeaponReady();
+			//console.printf("primary: %d | secondary: %d",invoker.primaryAmmo.amount,invoker.secondaryAmmo.amount);
 		}
 		loop;
 	// Fire state is required for the weapon to function but isn't used directly.
@@ -559,22 +597,22 @@ Class EDW_Weapon : Weapon abstract
 	// Normally Select can be left as is in weapons based on this one.
 	// Redefine only if you want to significantly change selection animation
 	Select:
-		TNT1 A 1
+		TNT1 A 0
 		{
-			A_overlay(PSP_RIGHTGUN, "Select.Right", nooverride:true);
-			A_Overlay(PSP_LEFTGUN, "Select.Left", nooverride:true);
-			A_Raise(invoker.raisespeed);
+			A_overlay(PSP_RIGHTGUN, "Select.Right");
+			A_Overlay(PSP_LEFTGUN, "Select.Left");
 		}
+		TNT1 A 1 A_Raise(invoker.raisespeed);
 		wait;
 	// Normally Deselect can be left as is in weapons based on this one.
 	// Redefine if you want to significantly change deselection animation
 	Deselect:
-		TNT1 A 1
+		TNT1 A 0
 		{
-			A_overlay(PSP_RIGHTGUN, "Deselect.Right", nooverride:true);
-			A_Overlay(PSP_LEFTGUN, "Deselect.Left", nooverride:true);
-			A_Lower(invoker.lowerspeed);
+			A_overlay(PSP_RIGHTGUN, "Deselect.Right");
+			A_Overlay(PSP_LEFTGUN, "Deselect.Left");
 		}
+		TNT1 A 1 A_Lower(invoker.lowerspeed);
 		wait;
 	}
 }
@@ -590,25 +628,30 @@ Class EDW_Weapon : Weapon abstract
 	of things that could be done to improve the visuals of the weapon.
 */
 
+
+
+// This is the main demo weapon. It shows how to define
+// all required states and how to call functions.
+// It also uses magazines, and guns can't be reloaded
+// at the same time.
 Class EDW_PlasmaAndCannon : EDW_Weapon
 {
 	Default
 	{
 		EDW_Weapon.MagAmmotype1 "EDW_RocketMag";
 		EDW_Weapon.MagAmmotype2 "EDW_PlasmaMag";
+		Weapon.Slotnumber	5;
 		Weapon.AmmoType1 	"RocketAmmo";
 		Weapon.AmmoGive1 	20;
 		Weapon.Ammouse1 	1;
 		Weapon.AmmoType2 	"Cell";
 		Weapon.AmmoGive2 	80;
 		Weapon.Ammouse2 	1;
-		Weapon.Slotnumber	9;
 		//InverseSmooth is my preferred bobbing style, but any should work
 		Weapon.Bobstyle		'InverseSmooth';
 		Weapon.BobRangeX	0.7;
 		Weapon.BobRangeY	0.5;
 		Weapon.BobSpeed		1.85;
-		//+EDW_Weapon.AKIMBORELOAD
 	}
 	States
 	{
@@ -624,15 +667,20 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	Select.Right:
 		ATGG A 1 Right_Raise();
 		Loop;
+	// Below I'm using some overlay functions for visuals only.
 	Fire.Right:
 		ATGG A 1
 		{
+			Right_GunFlash();
 			//We change the gun's scale and offset in its attack animation,
 			//so I start by resetting those just to be safe.
 			A_OverlayOffset(OverlayID(),0,0,WOF_INTERPOLATE);
 			A_OverlayScale(OverlayID(),1,1,WOF_INTERPOLATE);
-			Right_GunFlash();
-			// This simply spawns a rocket that looks smaller and flies faster:
+			//Do the same with the muzzle flash so it's synced
+			A_OverlayOffset(PSP_RIGHTFLASH,0,0,WOF_INTERPOLATE);
+			A_OverlayScale(PSP_RIGHTFLASH,1,1,WOF_INTERPOLATE);
+			// This simply spawns a rocket that looks smaller and flies faster,
+			// because I didn't bother with making a new projectile for this demo.
 			let proj = Right_FireProjectile("Rocket",spawnofs_xy:8);
 			if (proj)
 			{
@@ -645,7 +693,7 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 			//Offset the gun and increase its scale:
 			A_OverlayScale(OverlayID(),0.06,0.06,WOF_ADD);
 			A_OverlayOffset(OverlayID(),6,6,WOF_ADD);
-			//Do the same with the muzzle flash so it's synced!
+			//Do the same with the muzzle flash so it's synced
 			A_OverlayScale(PSP_RIGHTFLASH,0.06,0.06,WOF_ADD);
 			A_OverlayOffset(PSP_RIGHTFLASH,6,6,WOF_ADD);
 		}
@@ -668,9 +716,11 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		ATGF A 2 bright A_Light2;
 		ATGF B 2 bright A_Light1;
 		Goto LightDone;
+	// The reload animation:
 	Reload.Right:
 		ATGG AAAAAAA 1
 		{
+			//Tilt the gun to the right, offset and scale it:
 			A_OverlayRotate(OverlayID(),-2,WOF_ADD);
 			A_OverlayOffset(OverlayID(),6,3,WOF_ADD);
 			A_OverlayScale(OverlayID(),0.012,0.012,WOF_ADD);
@@ -678,40 +728,43 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		ATGG A 6;
 		ATGG A 1 
 		{
+			//Play reload sound and jerk the gun upward:
 			A_OverlayOffset(OverlayID(),0,4,WOF_ADD);
 			A_StartSound("misc/w_pkup",CHAN_AUTO);
 			Right_Loadmag();
 		}
+		//now lower the gun as if we've inserted a magazine:
 		ATGG AAAA 1 A_OverlayOffset(OverlayID(),0,-1,WOF_ADD);
 		ATGG A 5;
 		ATGG AAAAAAA 1
 		{
+			//Restore the gun's angle, offset and scale:
 			A_OverlayRotate(OverlayID(),2,WOF_ADD);
 			A_OverlayOffset(OverlayID(),-6,-3,WOF_ADD);
 			A_OverlayScale(OverlayID(),-0.012,-0.012,WOF_ADD);
 		}
 		TNT1 A 0 
 		{
+			//Make sure the angle/scale/offset are correct:
 			A_OverlayRotate(OverlayID(),0);
 			A_OverlayOffset(OverlayID(),0,0);
 			A_OverlayScale(OverlayID(),1,1);
 		}
 		goto Ready.Right;
+	// This animation plays out while the OTHER gun is being reloaded:
 	ReloadWait.Right:
 		ATGG AAAA 1 A_OverlayOffset(OverlayID(),10,20,WOF_ADD);
 		TNT1 A 1
 		{
+			//keep checking if the other gun is still in Reload,
+			//and if not, jump to the end of the animation:
 			let psp = Player.FindPSprite(PSP_LEFTGUN);
-			return A_JumpIf(!psp || InStateSequence(psp.curstate,invoker.s_readyleft), "ReloadWaitEnd.Right");
+			return A_JumpIf(!psp || !InStateSequence(psp.curstate,invoker.s_reloadLeft), "ReloadWaitEnd.Right");
 		}
 		wait;
 	ReloadWaitEnd.Right:
 		ATGG AAAA 1 A_OverlayOffset(OverlayID(),-10,-20,WOF_ADD);
-		TNT1 A 0
-		{
-			A_OverlayOffset(OverlayID(),0,0);
-			Left_Reload();
-		}
+		TNT1 A 0 A_OverlayOffset(OverlayID(),0,0);
 		goto Ready.Right;
 			
 		
@@ -771,6 +824,7 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	Reload.Left:
 		D3PG AAAAAAA 1
 		{
+			//Tilt the gun to the left, offset and scale it:
 			A_OverlayRotate(OverlayID(),2,WOF_ADD);
 			A_OverlayOffset(OverlayID(),-6,3,WOF_ADD);
 			A_OverlayScale(OverlayID(),0.012,0.012,WOF_ADD);
@@ -778,6 +832,7 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		D3PG A 6;
 		D3PG A 1 
 		{
+			//Play reload sound and jerk the gun upward:
 			A_OverlayOffset(OverlayID(),0,4,WOF_ADD);
 			A_StartSound("misc/w_pkup",CHAN_AUTO);
 			Left_Loadmag();
@@ -786,23 +841,28 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 		D3PG A 5;
 		D3PG AAAAAAA 1
 		{
+			//Restore the gun's angle, offset and scale:
 			A_OverlayRotate(OverlayID(),-2,WOF_ADD);
 			A_OverlayOffset(OverlayID(),6,-3,WOF_ADD);
 			A_OverlayScale(OverlayID(),-0.012,-0.012,WOF_ADD);
 		}
 		TNT1 A 0 
 		{
+			//Make sure the angle/scale/offset are correct:
 			A_OverlayRotate(OverlayID(),0);
 			A_OverlayOffset(OverlayID(),0,0);
 			A_OverlayScale(OverlayID(),1,1);
 		}
 		Goto Ready.Left;
+	// This animation plays out while the OTHER gun is being reloaded:
 	ReloadWait.Left:
 		D3PG AAAA 1 A_OverlayOffset(OverlayID(),-10,20,WOF_ADD);
 		TNT1 A 1
 		{
+			//keep checking if the other gun is still in Reload,
+			//and if not, jump to the end of the animation:
 			let psp = Player.FindPSprite(PSP_RIGHTGUN);
-			return A_JumpIf(!psp || InStateSequence(psp.curstate,invoker.s_readyRight), "ReloadWaitEnd.Left");
+			return A_JumpIf(!psp || !InStateSequence(psp.curstate,invoker.s_reloadRight), "ReloadWaitEnd.Left");
 		}
 		wait;
 	ReloadWaitEnd.Left:
@@ -833,5 +893,53 @@ Class EDW_RocketMag : Ammo
 		Ammo.BackPackAmount 0;
 		Ammo.BackPackMaxamount 8;
 		+INVENTORY.IGNORESKILL
+	}
+}
+
+// This is a simple version that doesn't use magazines,
+// it consumes ammo directly.
+Class EDW_PlasmaAndCannonNoMags : EDW_PlasmaAndCannon
+{
+	Default
+	{
+		EDW_Weapon.MagAmmotype1 "";
+		EDW_Weapon.MagAmmotype2 "";
+		Weapon.Slotnumber	3;
+	}
+}
+
+// This version does use magazines, but both guns can be
+// reloaded independently, so the reload animation is
+// simpler and is easier to handle.
+Class EDW_PlasmaAndCannonAkimbo : EDW_PlasmaAndCannon
+{
+	Default
+	{
+		+EDW_Weapon.AKIMBORELOAD
+		Weapon.Slotnumber	4;
+		EDW_Weapon.raisespeed 32; //this is high because we're using custom animation
+	}
+	States
+	{
+	/*	In this example we're using custom selection animation.
+		The right gun is selected slowly and rotates.
+	*/
+	Select.Right:
+		TNT1 A 0
+		{
+			A_OverlayOffset(OverlayID(),20,60);
+			A_OverlayRotate(OverlayID(),16);
+		}
+		ATGG AAAAAAAAAAAAAAAA 1 
+		{
+			A_OverlayOffset(OverlayID(),-1.25,-3.75,WOF_ADD);
+			A_OverlayRotate(OverlayID(),-1,WOF_ADD);
+		}
+		goto Ready.Right;
+	// The left gun is selected quickly
+	Select.Left:
+		TNT1 A 0 A_OverlayOffset(OverlayID(),-40,40);
+		D3PG AAAA 1 A_OverlayOffset(OverlayID(),10,-10,WOF_ADD);
+		goto Ready.Left;
 	}
 }
