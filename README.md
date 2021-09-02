@@ -51,3 +51,10 @@ If you're designing a custom function or for some other reason need to manually 
 * `EDW_Weapon.raisespeed` and `EDW_Weapon.lowerspeed` define the selection and deselection speed for the weapons (6 by default, which is the same as the vanilla `A_Raise`/`A_Lower` speed). If you want a completely custom animation, you can set this to a high value, then draw your own animation in the `Raise.Right` and `Raise.Left` states. (See `EDW_PlasmaAndCannonAkimbo` class in `zscript.zs` for an example of how to do that.)
 * `EDW_Weapon.AKIMBORELOAD`: if this flag is set, the guns can be reloaded at any moment, independently from each other. You can keep firing the right gun and reload the left gun at the same time, or you can reload both guns simultaneously (doesn't matter if their reload animations are different in length). *Without* this flag the guns can only be reloaded when both of them are in their respective `Ready` sequences, and when one gun gets reloaded, the other one will have to enter its `ReloadWait` sequence (if that exists). The main example class, `EDW_PlasmaAndCannon`, illustrates how this can be done.
 
+## Example weapons
+
+The library comes with 3 example weapons which are all variations on a Plasma rifle + Rocket Cannon combo:
+
+* Slot 3: This variation consumes `Cell` and `RocketAmmo` directly
+* Slot 4: This version uses magazines and has `AKIMBORELOAD` flag, meaning each gun can be reloaded at any moment, regardless of what the other gun is doing.
+* Slot 5: This version uses magazines and does not have `AKIMBORELOAD` flag, meaning the guns can be reloaded only when both guns are in the `Ready` sequence, and the other gun has to enter `ReloadWait` sequence for the current one to be reloaded.
