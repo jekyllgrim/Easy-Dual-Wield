@@ -35,7 +35,7 @@ If your weapon can be reloaded, you will also need `Reload.Right` and `Reload.Le
 There's a number of custom functions in this weapon class. They're all commented in `zscript.zs` but here's a quick overview of the main ones:
 
 * `Right_WeaponReady` and `Left_WeaponReady` should be called in `Ready.Right` and `Ready.Left` state sequences and make the gun ready for firing and reloading.
-* `Right_GunFlash` and `Left_GunFlash` are analogs of `A_GunFlash`. They will draw `Flash.Right` and `Flash.Left` state sequences on `PSP_RIGHTFLAG` and `PSP_LEFTFLASH` layers.
+* `Right_GunFlash` and `Left_GunFlash` are analogs of `A_GunFlash`. They will draw `Flash.Right` and `Flash.Left` state sequences on `PSP_RIGHTFLASH` and `PSP_LEFTFLASH` layers.
 * `Right_Reload` and `Left_Reload` make the gun enter its respective `Reload.Right`/`Reload.Left` state sequence. How the reload animation is designed is up to you.
 * `Right_Loadmag` and `Left_Loadmag` functions refill the gun's magazine from the ammo pool. They're meant to be called somewhere in the `Reload.` sequence. If you want a detailed reload, like where every round is inserted in the gun, you'll have to design that yourself.
 
