@@ -17,6 +17,7 @@ Class EDW_Weapon : Weapon abstract
 	FlagDef NOAUTOPRIMARY 		: EDWflags, 0; //NOAUTOFIRE analog for primary attack only
 	FlagDef NOAUTOSECONDARY 	: EDWflags, 1; //NOAUTOFIRE analog for secondary attack only
 	FlagDef AKIMBORELOAD		: EDWflags, 2; //if true, right and left guns can reload independently
+	FlagDef MIRRORWEAPON		: EDWflags, 3; //if true, guns look and behave identical
 	
 	protected Ammo primaryAmmo, secondaryAmmo;	//points either to ammo1/ammo2 or to magammo1/magammo2	
 	
@@ -564,7 +565,7 @@ Class EDW_Weapon : Weapon abstract
 		return true;
 	}
 	
-	/*	Ready, Fire, AltFire, Select and Desleect state sequences
+	/*	Ready, Fire, AltFire, Select and Deselect state sequences
 		have to be defined in this base weapon, otherwise it won't
 		compile.
 		Left/right gun-specific states have to be defined in your 
