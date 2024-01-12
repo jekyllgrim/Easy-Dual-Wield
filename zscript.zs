@@ -81,7 +81,23 @@ Class EDW_Weapon : Weapon abstract
 	override void DoEffect()
 	{
 		super.DoEffect();
-		//console.printf("continue reload: %d",continueReload);
+		// This block makes sure overlays don't linger if
+		// the main layer doesn't exist anymore (e.g. if
+		// the player is dead):
+		let weap = owner.player.readyweapon;
+		if (!weap || weap != self)
+			return;
+
+		let psp = owner.player.FindPSprite(PSP_WEAPON);
+		if (!psp)
+		{
+			let pl = owner.player.FindPSprite(PSP_LEFTGUN);
+			if (pl)
+				pl.Destroy();
+			let pr = owner.player.FindPSprite(PSP_RIGHTGUN);
+			if (pr)
+				pr.Destroy();
+		}
 	}
 	
 	// Returns true if ammo should be infinite
