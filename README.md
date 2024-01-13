@@ -45,11 +45,15 @@ As such, you will have functions such as `Right_FireBullets` and `Left_FireBulle
 
 If you're designing a custom function or for some other reason need to manually tell the gun which ammo to consume, use `A_SetFireMode(<value>)` function, where the <value> of `true` will make it consume secondary ammo, and `false` will make it consume primary ammo. Call it right before calling your attack function.
 
-### Properties and flags
+### Properties
 
 * `EDW_Weapon.MagAmmotype1` and `EDW_Weapon.MagAmmotype2`: if you want your weapons to be reloadable, use these properties to specify the name of the ammo classes used as magazine ammo. In this case `Ammotype1` and `Ammotype2` will be used as respective reserve ammo. Note that if you do that, the magazine ammo capacity will not be displayed on the HUD, because the default HUD is only coded to display `Ammotype1` and `Ammotype2`. You'll need to code your own HUD to display them as well.
 * `EDW_Weapon.raisespeed` and `EDW_Weapon.lowerspeed` define the selection and deselection speed for the weapons (6 by default, which is the same as the vanilla `A_Raise`/`A_Lower` speed). If you want a completely custom animation, you can set this to a high value, then draw your own animation in the `Raise.Right` and `Raise.Left` states. (See `EDW_PlasmaAndCannonAkimbo` class in `zscript.zs` for an example of how to do that.)
-* `EDW_Weapon.AKIMBORELOAD`: if this flag is set, the guns can be reloaded at any moment, independently from each other. You can keep firing the right gun and reload the left gun at the same time, or you can reload both guns simultaneously (doesn't matter if their reload animations are different in length). *Without* this flag the guns can only be reloaded when both of them are in their respective `Ready` sequences, and when one gun gets reloaded, the other one will have to enter its `ReloadWait` sequence (if that exists). The main example class, `EDW_PlasmaAndCannon`, illustrates how this can be done.
+
+### Flags
+
+* `EDW_Weapon.MIRRORBOB`: If this flag is set, the bobbing for the weapons will be horizontally mirrored.
+* `EDW_Weapon.AKIMBORELOAD`: If this flag is set, the guns can be reloaded at any moment, independently from each other. You can keep firing the right gun and reload the left gun at the same time, or you can reload both guns simultaneously (doesn't matter if their reload animations are different in length). *Without* this flag the guns can only be reloaded when both of them are in their respective `Ready` sequences, and when one gun gets reloaded, the other one will have to enter its `ReloadWait` sequence (if that exists). The main example class, `EDW_PlasmaAndCannon`, illustrates how this can be done.
 
 ## Example weapons
 
