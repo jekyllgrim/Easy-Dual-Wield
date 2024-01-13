@@ -2,6 +2,8 @@ version "4.6.0"
 
 Class EDW_Weapon : Weapon abstract
 {
+	const PI = 3.1415926535897932384626433;
+
 	class<Ammo> MagAmmotype1, MagAmmotype2; //magazine ammo (if used)
 	property MagAmmotype1 : MagAmmotype1;
 	property MagAmmotype2 : MagAmmotype2;
@@ -18,6 +20,7 @@ Class EDW_Weapon : Weapon abstract
 	FlagDef NOAUTOSECONDARY 	: EDWflags, 1; //NOAUTOFIRE analog for secondary attack only
 	FlagDef AKIMBORELOAD		: EDWflags, 2; //if true, right and left guns can reload independently
 	FlagDef MIRRORWEAPON		: EDWflags, 3; //if true, guns look and behave identical
+	FlagDef MIRRORBOB			: EDWflags, 4; //if true, guns bob in opposite horizontal directions
 	
 	protected Ammo primaryAmmo, secondaryAmmo;	//points either to ammo1/ammo2 or to magammo1/magammo2	
 	
@@ -36,14 +39,6 @@ Class EDW_Weapon : Weapon abstract
 	protected state s_reloadWaitRight;	
 	protected state s_reloadWaitLeft;
 	
-	Default
-	{
-		EDW_Weapon.MagAmmotype1	"";		
-		EDW_Weapon.MagAmmotype2 	"";
-		EDW_Weapon.raisespeed		6;
-		EDW_Weapon.lowerspeed		6;
-	}
-	
 	// Aliases for gun overlays
 	enum FireLayers
 	{
@@ -57,6 +52,14 @@ Class EDW_Weapon : Weapon abstract
 	{
 		CHAN_RIGHTGUN	= 12,
 		CHAN_LEFTGUN = 13
+	}
+	
+	Default
+	{
+		EDW_Weapon.MagAmmotype1	"";		
+		EDW_Weapon.MagAmmotype2 	"";
+		EDW_Weapon.RaiseSpeed		6;
+		EDW_Weapon.LowerSpeed		6;
 	}
 	
 	// Set pointers to states here:
@@ -256,30 +259,57 @@ Class EDW_Weapon : Weapon abstract
 		Right_Raise(true);
 	}
 	
+	action void DoSingleWeaponBob()
+	{
+		if (!player || !player.mo)
+			return;
+
+		let psp = player.FindPSprite(OverlayID());
+		if (!psp)
+		{
+			return;
+		}
+
+		if (!invoker.bMIRRORBOB)
+		{
+			A_OverlayFlags(OverlayID(), PSPF_ADDBOB, true);
+			return;
+		}
+		
+		A_OverlayFlags(OverlayID(), PSPF_ADDBOB, false);
+		vector2 bob = player.mo.BobWeapon(1);
+		A_OverlayOffset(OverlayID(), 
+			(OverlayID() == PSP_RIGHTGUN) ? bob.x : bob.x * -PI * 0.5,
+			bob.y,
+			WOF_INTERPOLATE
+		);
+	}
+	
 	/* 	Ready function for the right weapon.
 		Will jump into the right Fire sequence or right Reload sequence
 		based on buttons pressed and ammo available.
 	*/
-	action void Right_WeaponReady()
+	action void Right_WeaponReady(bool left = false)
 	{
 		if (!player)
 			return;
-		//Enable bobbing:
-		A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
+			
+		
 		state targetState = null;
-		bool pressingFire = player.cmd.buttons & BT_ATTACK;		
+		bool pressingFire = player.cmd.buttons & (left ? BT_ALTATTACK : BT_ATTACK);
 		if (pressingFire)
 		{
-			if (Right_CheckAmmo())
+			if (Right_CheckAmmo(left))
 			{
-				targetState = invoker.s_fireRight;
+				targetState = left ? invoker.s_fireLeft : invoker.s_fireRight;
 				invoker.continueReload = false;
 			}
-			else if (invoker.MagAmmotype1 && invoker.ammo1.amount > 0)
+			else
 			{
-				if (invoker.bAKIMBORELOAD || Left_CheckReadyForReload())
+				bool reloadGood = left ? (invoker.MagAmmotype2 && invoker.ammo2.amount > 0) : (invoker.MagAmmotype1 && invoker.ammo1.amount > 0);
+				if (reloadGood && (invoker.bAKIMBORELOAD || Right_CheckReadyForReload(left)))
 				{
-					Right_Reload();
+					Right_Reload(left);
 					return;
 				}
 			}			
@@ -287,64 +317,23 @@ Class EDW_Weapon : Weapon abstract
 		//if we're going to fire/reload, disable bobbing:
 		if (targetState) 
 		{
-			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,false);
+			A_OverlayFlags(OverlayID(), PSPF_ADDBOB, false);
 			player.SetPsprite(OverlayID(),targetState);
 		}
 		//otherwise re-enable bobbing:
 		else 
 		{
-			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
+			// Handle bobbing:
+			DoSingleWeaponBob();
 		}
 	}
-	
-	/* 	Ready function for the left weapon.
-		Will jump into the left Fire sequence or left Reload sequence
-		based on buttons pressed and ammo available.
-	*/
+	// 	Left-gun alias function:
 	action void Left_WeaponReady()
 	{
-		if (!player)
-			return;			
-		A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
-		/*A_OverlayFlags(OverlayID(),PSPF_ADDBOB,false);
-		let psp = player.FindPSprite(PSP_RIGHTGUN);
-		if (psp)
-		{
-			//console.printf("x: %f | y: %f",psp.coord1.x,psp.coord1.y);
-			double wx = (abs(psp.x) - 0.5) * -Sign(psp.x); //mirror X offset
-			double wy = (abs(psp.y) - 0.5) * Sign(psp.y);
-			//A_OverlayOffset(OverlayID(),wx, wy, WOF_INTERPOLATE);
-		}*/
-		state targetState = null;
-		bool pressingFire = player.cmd.buttons & BT_ALTATTACK;		
-		if (pressingFire)
-		{
-			if (Left_CheckAmmo())
-			{
-				targetState = invoker.s_fireLeft;
-				invoker.continueReload = false;
-			}
-			else if (invoker.MagAmmotype2 && invoker.ammo2.amount > 0)
-			{
-				if (invoker.bAKIMBORELOAD || Right_CheckReadyForReload())
-				{
-					Left_Reload();
-					return;
-				}					
-			}			
-		}		
-		if (targetState) 
-		{
-			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,false);
-			player.SetPsprite(OverlayID(),targetState);
-		}
-		else 
-		{
-			A_OverlayFlags(OverlayID(),PSPF_ADDBOB,true);
-		}
+		Right_WeaponReady(true);
 	}
 	
-	/*	Right-gun analong of A_GunFlash. Does two things:
+	/*	Single-gun analong of A_GunFlash. Does two things:
 		- Draws Flash.Right/Flash.Left on PSP_RIGHTFLASH/PSP_LEFTFLASH layers
 		- Makes sure the flash doesn't follow weapon bob and gets aligned
 		with the gun layer the moment it's called (If you want to move the 
@@ -538,46 +527,51 @@ Class EDW_Weapon : Weapon abstract
 
 	override bool DepleteAmmo(bool altFire, bool checkEnough, int ammouse)
 	{
-		if (!EDW_CheckInfiniteAmmo())
+		if (EDW_CheckInfiniteAmmo())
+			return true;
+
+		if (checkEnough && !CheckAmmo (altFire ? AltFire : PrimaryFire, false, false, ammouse))
 		{
-			if (checkEnough && !CheckAmmo (altFire ? AltFire : PrimaryFire, false, false, ammouse))
+			return false;
+		}
+		if (!altFire)
+		{
+			if (primaryAmmo != null)
 			{
-				return false;
-			}			
-			if (!altFire)
-			{
-				if (primaryAmmo != null)
+				if (ammouse >= 0 && bDehAmmo)
 				{
-					if (ammouse >= 0 && bDehAmmo)
-					{
-						primaryAmmo.Amount -= ammouse;
-					}
-					else
-					{
-						primaryAmmo.Amount -= AmmoUse1;
-					}
+					primaryAmmo.Amount -= ammouse;
 				}
-				if (bPRIMARY_USES_BOTH && secondaryAmmo != null)
-				{
-					secondaryAmmo.Amount -= AmmoUse2;
-				}
-			}
-			else
-			{
-				if (secondaryAmmo != null)
-				{
-					secondaryAmmo.Amount -= AmmoUse2;
-				}
-				if (bALT_USES_BOTH && primaryAmmo != null)
+				else
 				{
 					primaryAmmo.Amount -= AmmoUse1;
 				}
 			}
-			if (primaryAmmo != null && primaryAmmo.Amount < 0)
-				primaryAmmo.Amount = 0;
-			if (secondaryAmmo != null && secondaryAmmo.Amount < 0)
-				secondaryAmmo.Amount = 0;
+			if (bPRIMARY_USES_BOTH && secondaryAmmo != null)
+			{
+				secondaryAmmo.Amount -= AmmoUse2;
+			}
 		}
+		else
+		{
+			if (secondaryAmmo != null)
+			{
+				secondaryAmmo.Amount -= AmmoUse2;
+			}
+			if (bALT_USES_BOTH && primaryAmmo != null)
+			{
+				primaryAmmo.Amount -= AmmoUse1;
+			}
+		}
+		if (primaryAmmo != null && primaryAmmo.Amount < 0)
+		{
+			primaryAmmo.Amount = 0;
+		}
+		if (secondaryAmmo != null && secondaryAmmo.Amount < 0)
+		{
+			secondaryAmmo.Amount = 0;
+		}
+
 		return true;
 	}
 	
@@ -636,7 +630,7 @@ Class EDW_Weapon : Weapon abstract
 
 
 /*	This is an example weapon that combines a plasma rifle
-	and an explosive cannon.
+	and a rocket cannon.
 	
 	Apart from showing how to apply the Easy Dual-Wield functions,
 	in this gun I'm also demonstrating how to apply overlay offset 
@@ -657,14 +651,14 @@ Class EDW_PlasmaAndCannon : EDW_Weapon
 	{
 		EDW_Weapon.MagAmmotype1 "EDW_RocketMag";
 		EDW_Weapon.MagAmmotype2 "EDW_PlasmaMag";
-		Weapon.Slotnumber	5;
+		Weapon.Slotnumber	4;
 		Weapon.AmmoType1 	"RocketAmmo";
 		Weapon.AmmoGive1 	20;
 		Weapon.Ammouse1 	1;
 		Weapon.AmmoType2 	"Cell";
 		Weapon.AmmoGive2 	80;
 		Weapon.Ammouse2 	1;
-		//InverseSmooth is my preferred bobbing style, but any should work
+		// InverseSmooth is my preferred bobbing style, but any should work
 		Weapon.Bobstyle		'InverseSmooth';
 		Weapon.BobRangeX	0.7;
 		Weapon.BobRangeY	0.5;
@@ -922,6 +916,7 @@ Class EDW_PlasmaAndCannonNoMags : EDW_PlasmaAndCannon
 		EDW_Weapon.MagAmmotype1 "";
 		EDW_Weapon.MagAmmotype2 "";
 		Weapon.Slotnumber	3;
+		+EDW_Weapon.MIRRORBOB
 	}
 }
 
@@ -933,8 +928,10 @@ Class EDW_PlasmaAndCannonAkimbo : EDW_PlasmaAndCannon
 	Default
 	{
 		+EDW_Weapon.AKIMBORELOAD
-		Weapon.Slotnumber	4;
+		+EDW_Weapon.MIRRORBOB
+		Weapon.Slotnumber	5;
 		EDW_Weapon.raisespeed 32; //this is high because we're using custom animation
+		Weapon.BobStyle 'Normal';
 	}
 	States
 	{
@@ -955,8 +952,8 @@ Class EDW_PlasmaAndCannonAkimbo : EDW_PlasmaAndCannon
 		goto Ready.Right;
 	// The left gun is selected quickly
 	Select.Left:
-		TNT1 A 0 A_OverlayOffset(OverlayID(),-40,40);
-		D3PG AAAA 1 A_OverlayOffset(OverlayID(),10,-10,WOF_ADD);
+		TNT1 A 0 A_OverlayOffset(OverlayID(),-60,60);
+		D3PG AAAAA 1 A_OverlayOffset(OverlayID(), 12,-12,WOF_ADD);
 		goto Ready.Left;
 	}
 }
